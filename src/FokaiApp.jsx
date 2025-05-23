@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth"
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, addDoc, collection } from "firebase/firestore"
 import app from './firebase'
 
 const provider = new GoogleAuthProvider()
@@ -9,24 +9,23 @@ const db = getFirestore(app)
 
 export default function FokaiApp() {
   const [user, setUser] = useState(null)
+  const [sessionDate, setSessionDate] = useState('')
+  const [sessionTime, setSessionTime] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       if (u) {
         setUser(u)
-        try {
-          const ref = doc(db, "users", u.uid)
-          const snap = await getDoc(ref)
-          if (!snap.exists()) {
-            await setDoc(ref, {
-              name: u.displayName || "",
-              email: u.email || "",
-              plan: "free",
-              createdAt: serverTimestamp()
-            })
-          }
-        } catch (err) {
-          console.error("Erro ao salvar no Firestore:", err)
+        const ref = doc(db, "users", u.uid)
+        const snap = await getDoc(ref)
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            name: u.displayName,
+            email: u.email,
+            plan: "free",
+            createdAt: serverTimestamp()
+          })
         }
       } else {
         setUser(null)
@@ -36,15 +35,30 @@ export default function FokaiApp() {
   }, [])
 
   function login() {
-    signInWithPopup(auth, provider).catch(err => {
-      console.error("Erro ao fazer login:", err)
-    })
+    signInWithPopup(auth, provider)
   }
 
   function logout() {
-    signOut(auth).catch(err => {
-      console.error("Erro ao sair:", err)
-    })
+    signOut(auth)
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSuccessMessage('')
+    try {
+      const sessionRef = collection(db, "sessions")
+      await addDoc(sessionRef, {
+        uid: user.uid,
+        date: sessionDate,
+        time: sessionTime,
+        createdAt: serverTimestamp()
+      })
+      setSuccessMessage('Sessão agendada com sucesso!')
+      setSessionDate('')
+      setSessionTime('')
+    } catch (err) {
+      alert('Erro ao agendar sessão')
+    }
   }
 
   return (
@@ -60,7 +74,33 @@ export default function FokaiApp() {
       ) : (
         <>
           <p>Bem-vinda, {user.displayName}</p>
-          <button onClick={logout} className="text-blue-600 underline">Sair</button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block">Data da sessão:</label>
+              <input
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+                className="border px-2 py-1 rounded w-full"
+                required
+              />
+            </div>
+            <div>
+              <label className="block">Horário:</label>
+              <input
+                type="time"
+                value={sessionTime}
+                onChange={(e) => setSessionTime(e.target.value)}
+                className="border px-2 py-1 rounded w-full"
+                required
+              />
+            </div>
+            <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
+              Agendar sessão
+            </button>
+            {successMessage && <p className="text-green-600 font-medium mt-2">{successMessage}</p>}
+          </form>
+          <button onClick={logout} className="text-blue-600 underline mt-4">Sair</button>
         </>
       )}
     </div>
