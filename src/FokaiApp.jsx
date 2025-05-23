@@ -1,24 +1,50 @@
 import { useEffect, useState } from 'react'
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth"
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
+import app from './firebase'
 
 const provider = new GoogleAuthProvider()
+const auth = getAuth(app)
+const db = getFirestore(app)
 
 export default function FokaiApp() {
   const [user, setUser] = useState(null)
 
   useEffect(() => {
-    const auth = getAuth()
-    auth.onAuthStateChanged(u => setUser(u))
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      if (u) {
+        setUser(u)
+        try {
+          const ref = doc(db, "users", u.uid)
+          const snap = await getDoc(ref)
+          if (!snap.exists()) {
+            await setDoc(ref, {
+              name: u.displayName || "",
+              email: u.email || "",
+              plan: "free",
+              createdAt: serverTimestamp()
+            })
+          }
+        } catch (err) {
+          console.error("Erro ao salvar no Firestore:", err)
+        }
+      } else {
+        setUser(null)
+      }
+    })
+    return () => unsubscribe()
   }, [])
 
   function login() {
-    const auth = getAuth()
-    signInWithPopup(auth, provider)
+    signInWithPopup(auth, provider).catch(err => {
+      console.error("Erro ao fazer login:", err)
+    })
   }
 
   function logout() {
-    const auth = getAuth()
-    signOut(auth)
+    signOut(auth).catch(err => {
+      console.error("Erro ao sair:", err)
+    })
   }
 
   return (
